@@ -3,17 +3,17 @@ BeforeAll {
     $scriptPath = Join-Path $PSScriptRoot 'Get-AzureServices.ps1'
     $modulesPath = Join-Path $PSScriptRoot 'modules'
     
-    # Source the script functions for testing
-    # We need to dot-source only the function definitions, not the main script body
-    $scriptContent = Get-Content $scriptPath -Raw
-    
-    # Extract function definitions and execute them in current scope
+    # Extract function definitions from the script for testing
+    # The functions use Set-Variable with -Scope Script, which means we need to
+    # dot-source them into the current scope rather than using a module
     $scriptAst = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$null, [ref]$null)
     $functionDefinitions = $scriptAst.FindAll({ param($ast) $ast -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true)
     
+    # Define each function in the current scope using scriptblocks
+    # This is safer than Invoke-Expression as it creates typed scriptblock objects
     foreach ($funcDef in $functionDefinitions) {
-        $funcScript = [scriptblock]::Create($funcDef.Extent.Text)
-        . $funcScript
+        $funcBlock = [scriptblock]::Create($funcDef.Extent.Text)
+        . $funcBlock
     }
 }
 
@@ -115,6 +115,11 @@ Describe "Get-AzureServices.ps1 Tests" {
     }
 
     Context "Get-Property Function" {
+        AfterEach {
+            # Clean up script-scoped test variable to prevent test pollution
+            Remove-Variable -Name 'testResult' -Scope Script -ErrorAction SilentlyContinue
+        }
+
         It "Should extract simple property from object" {
             $testObject = [PSCustomObject]@{
                 name = "TestResource"
@@ -162,6 +167,11 @@ Describe "Get-AzureServices.ps1 Tests" {
     }
 
     Context "Invoke-CmdLine Function" {
+        AfterEach {
+            # Clean up script-scoped test variable to prevent test pollution
+            Remove-Variable -Name 'cmdResult' -Scope Script -ErrorAction SilentlyContinue
+        }
+
         It "Should execute simple command and store result" {
             Invoke-CmdLine -cmdLine '1 + 1' -outputVarName "cmdResult"
             $script:cmdResult | Should -Be "2.00"
@@ -179,6 +189,11 @@ Describe "Get-AzureServices.ps1 Tests" {
     }
 
     Context "Get-MeterId Function" {
+        AfterEach {
+            # Clean up script-scoped test variable to prevent test pollution
+            Remove-Variable -Name 'meterIds' -Scope Script -ErrorAction SilentlyContinue
+        }
+
         It "Should extract unique meter IDs for a resource" {
             $mockCsv = @(
                 [PSCustomObject]@{ resourceId = "/subscriptions/123/resources/test"; meterId = "meter-1" }
@@ -273,6 +288,14 @@ Describe "Get-AzureServices.ps1 Tests" {
             Set-Location $originalLocation
         }
 
+        AfterEach {
+            # Clean up script-scoped variables to prevent test pollution
+            Remove-Variable -Name 'resiliencyProperties' -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable -Name 'dataSize' -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable -Name 'ipAddress' -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable -Name 'sku' -Scope Script -ErrorAction SilentlyContinue
+        }
+
         It "Should handle resiliencyProperties flag type" {
             $testObject = [PSCustomObject]@{
                 type = "microsoft.storage/storageaccounts"
@@ -331,6 +354,12 @@ Describe "Get-AzureServices.ps1 Tests" {
 
         AfterAll {
             Set-Location $originalLocation
+        }
+
+        AfterEach {
+            # Clean up script-scoped variables to prevent test pollution
+            Remove-Variable -Name 'testDataSize' -Scope Script -ErrorAction SilentlyContinue
+            Remove-Variable -Name 'testResiliency' -Scope Script -ErrorAction SilentlyContinue
         }
 
         It "Should extract property when isContainedInOriginalGraphOutput is true" {
