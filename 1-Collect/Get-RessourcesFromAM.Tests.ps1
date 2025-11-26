@@ -1,12 +1,14 @@
 BeforeAll {
-    $scriptPath = "$PSScriptRoot\Get-RessourcesFromAM.ps1"
+    # Use Join-Path for cross-platform compatibility
+    $scriptPath = Join-Path $PSScriptRoot 'Get-RessourcesFromAM.ps1'
 }
 
 Describe "Get-RessourcesFromAM.ps1 Tests" {
     Context "Parameter Validation" {
         It "Should require filePath parameter" {
             $scriptAst = [System.Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$null, [ref]$null)
-            $params = $scriptAst.FindAll({$args[0] -is [System.Management.Automation.Language.ParameterAst]}, $true)
+            $paramBlock = $scriptAst.ParamBlock
+            $params = $paramBlock.Parameters
             
             $filePathParam = $params | Where-Object { $_.Name.VariablePath.UserPath -eq 'filePath' }
             $filePathParam | Should -Not -BeNullOrEmpty
